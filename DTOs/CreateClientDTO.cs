@@ -1,4 +1,4 @@
 ﻿namespace ClientCore.Business.DTOs
 {
-    public class CreateClientDTO: ClientShared {}
+    public class CreateClientDTO: ClientShared { }
 }

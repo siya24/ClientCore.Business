@@ -1,4 +1,5 @@
 ﻿
+using ClientCore.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 
@@ -24,12 +25,95 @@ namespace ClientCore.Business.Services
                 client.Code = await GenerateClientCodeAsync(createClientDTO.Name);
                 await _context.Clients.AddAsync(client);
                 await _context.SaveChangesAsync();
+
+                //if (createClientDTO.ContactIds != null && createClientDTO.ContactIds.Any())
+                //{
+                //    await LinkContactsToClientAsync(client.Id, createClientDTO.ContactIds);
+                //}
+
                 return client.Id;
             }
             catch (Exception ex)
             {
                 // Log the exception (not implemented here)
                 throw new Exception("An error occurred while adding the client.", ex);
+            }
+        }
+
+        public async Task<List<GetClientDTO>> GetAllAsync()
+        {
+            try
+            {
+                var clientDTOs = await _context.Clients
+                    .Include(c => c.Contacts) 
+                    .OrderBy(c => c.Name)
+                    .Select(c => new GetClientDTO
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        Code = c.Code,
+                        TotalContacts = c.Contacts != null ? c.Contacts.Count : 0
+                    })
+                    .ToListAsync();
+
+                return clientDTOs;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("An error occurred while retrieving clients.", ex);
+            }
+        }
+
+        public async Task<GetClientDTO> GetAsync(string id)
+        {
+            try
+            {
+                var client = await _context.Clients
+                    .Select(c => new Client
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        Code = c.Code
+                    })
+                    .FirstOrDefaultAsync(c => c.Id == id) ?? throw new Exception("Client not found");
+                
+                var clientDTO = _mapper.Map<GetClientDTO>(client);
+                return clientDTO;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("An error occurred while retrieving the client.", ex);
+            }
+        }
+
+        public async Task LinkContactAsync(LinkContactDTO linkContactDTO)
+        {
+            if (linkContactDTO?.ClientId is null || linkContactDTO?.ContactId is null)
+                throw new Exception("Client ID and Contact ID cannot be null");
+
+            try
+            {
+                // Check if link already exists
+                var exists = await _context.ClientContacts
+                    .AnyAsync(cc => cc.ClientId == linkContactDTO.ClientId && cc.ContactId == linkContactDTO.ContactId);
+
+                if (!exists)
+                {
+                    var clientContact = new ClientContact
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        ClientId = linkContactDTO.ClientId,
+                        ContactId = linkContactDTO.ContactId
+                    };
+
+                    await _context.ClientContacts.AddAsync(clientContact);
+                }
+
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("An error occurred while linking contacts to client.", ex);
             }
         }
 
@@ -55,7 +139,7 @@ namespace ClientCore.Business.Services
             // Split the name into words
             string[] words = clientName.Split([' '], StringSplitOptions.RemoveEmptyEntries);
 
-            StringBuilder alphaPart = new StringBuilder();
+            StringBuilder alphaPart = new();
 
             if (words.Length >= 3)
             {
@@ -169,9 +253,6 @@ namespace ClientCore.Business.Services
             return numericSuffix;
         }
 
-        public Task<List<GetClientDTO>> GetAllAsync()
-        {
-            throw new NotImplementedException();
-        }
+      
     }
 }
